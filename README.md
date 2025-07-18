@@ -56,7 +56,7 @@ AARO ERP sistemi için Claude Desktop entegrasyonu sağlayan MCP (Model Context 
 
 1. **Repository'yi klonlayın:**
 ```bash
-git clone https://github.com/YOUR_USERNAME/aaro-erp-mcp-server.git
+git clone https://github.com/ysfkarakaya/aaro-erp-mcp-server.git
 cd aaro-erp-mcp-server
 ```
 
@@ -342,8 +342,8 @@ Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICE
 
 ## 📞 Destek ve İletişim
 
-- 🐛 **Bug Report**: [GitHub Issues](https://github.com/YOUR_USERNAME/aaro-erp-mcp-server/issues)
-- 💡 **Feature Request**: [GitHub Discussions](https://github.com/YOUR_USERNAME/aaro-erp-mcp-server/discussions)
+- 🐛 **Bug Report**: [GitHub Issues](https://github.com/ysfkarakaya/aaro-erp-mcp-server/issues)
+- 💡 **Feature Request**: [GitHub Discussions](https://github.com/ysfkarakaya/aaro-erp-mcp-server/discussions)
 - 📧 **Email**: your-email@example.com
 
 ---
