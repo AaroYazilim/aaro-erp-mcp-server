@@ -158,7 +158,7 @@ git push origin main
 Repository oluşturduktan sonra README.md dosyasındaki aşağıdaki kısımları güncelleyin:
 
 - `AaroYazilim` → Gerçek GitHub kullanıcı adınız
-- `your-email@example.com` → Gerçek email adresiniz
+- `info@aaro.com.tr` → Gerçek email adresiniz
 
 ## ✅ Kontrol Listesi
 
