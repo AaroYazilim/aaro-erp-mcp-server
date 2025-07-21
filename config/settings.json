@@ -1,0 +1,28 @@
+{
+  "server": {
+    "name": "aaro-erp-mcp-server",
+    "version": "1.0.0"
+  },
+  "erp": {
+    "baseUrl": "https://erp.aaro.com.tr",
+    "loginUrl": "https://erp.aaro.com.tr/Account/GeciciErisimAnahtari?",
+    "tokenSelector": "#anahtar",
+    "tokenCacheMinutes": 60
+  },
+  "browser": {
+    "headless": false,
+    "timeout": 300000,
+    "defaultViewport": null,
+    "args": ["--start-maximized"]
+  },
+  "api": {
+    "defaultHeaders": {
+      "Content-Type": "application/json"
+    },
+    "timeout": 30000
+  },
+  "logging": {
+    "enabled": true,
+    "level": "info"
+  }
+}

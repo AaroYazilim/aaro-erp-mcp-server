@@ -22,7 +22,7 @@ interface ErpTokenArgs {
 }
 
 interface ErpApiArgs {
-  endpoint: string;
+  endpoint?: string;
   method?: 'GET' | 'POST';
   params?: Record<string, any>;
   body?: any;
@@ -35,24 +35,65 @@ interface TokenCache {
   createdAt: number;
 }
 
+interface ToolConfig {
+  description: string;
+  endpoint?: string;
+  method?: string;
+  handler?: string;
+  inputSchema: any;
+}
+
+interface Settings {
+  server: {
+    name: string;
+    version: string;
+  };
+  erp: {
+    baseUrl: string;
+    loginUrl: string;
+    tokenSelector: string;
+    tokenCacheMinutes: number;
+  };
+  browser: {
+    headless: boolean;
+    timeout: number;
+    defaultViewport: any;
+    args: string[];
+  };
+  api: {
+    defaultHeaders: Record<string, string>;
+    timeout: number;
+  };
+  logging: {
+    enabled: boolean;
+    level: string;
+  };
+}
+
 const isValidErpTokenArgs = (args: any): args is ErpTokenArgs =>
   typeof args === 'object' && args !== null;
 
 const isValidErpApiArgs = (args: any): args is ErpApiArgs =>
-  typeof args === 'object' && args !== null && typeof args.endpoint === 'string';
+  typeof args === 'object' && args !== null;
 
 class ErpTokenServer {
   private server: Server;
   private browser: Browser | null = null;
   private tokenCacheFile: string;
+  private toolsConfig: Record<string, ToolConfig> = {};
+  private settings: Settings = {} as Settings;
 
   constructor() {
+    // Konfigürasyon dosyalarını yükle
+    this.loadConfigurations();
+    
     // Token cache dosyasının yolu
     this.tokenCacheFile = path.join(__dirname, '..', 'token-cache.json');
+    
     this.server = new Server(
       {
-        name: 'erp-token-server',
-        version: '1.0.0',
+        name: this.settings.server.name,
+        version: this.settings.server.version,
       },
       {
         capabilities: {
@@ -71,6 +112,31 @@ class ErpTokenServer {
     });
   }
 
+  private loadConfigurations() {
+    try {
+      // Settings yükle
+      const settingsPath = path.join(__dirname, '..', 'config', 'settings.json');
+      this.settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+      
+      // Tools konfigürasyonu yükle
+      const toolsPath = path.join(__dirname, '..', 'config', 'tools.json');
+      this.toolsConfig = JSON.parse(fs.readFileSync(toolsPath, 'utf8'));
+      
+      this.log('Konfigürasyon dosyaları başarıyla yüklendi');
+    } catch (error) {
+      console.error('Konfigürasyon dosyaları yüklenirken hata:', error);
+      process.exit(1);
+    }
+  }
+
+  private log(message: string, level: string = 'info', data?: any) {
+    if (!this.settings.logging.enabled) return;
+    
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] [${level.toUpperCase()}] ${message}`, data || '');
+  }
+
+
   private async cleanup() {
     if (this.browser) {
       await this.browser.close();
@@ -80,346 +146,46 @@ class ErpTokenServer {
   }
 
   private setupToolHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        {
-          name: 'erp_token_al',
-          description: 'ERP sisteminden geçici erişim anahtarı (token) alır. Tarayıcıyı açar, kullanıcının şifre girmesini bekler ve #anahtar elementinden token\'i alır.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              password: {
-                type: 'string',
-                description: 'ERP şifresi (opsiyonel - belirtilmezse kullanıcı manuel girer)',
-              },
-            },
-            required: [],
-          },
-        },
-        {
-          name: 'erp_stok_listele',
-          description: 'ERP sisteminden stok listesini getirir. Filtreleme parametreleri ile arama yapabilirsiniz.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              EsnekAramaKisiti: { type: 'string', description: 'Stok kodunda, adında arama' },
-              StokID: { type: 'string', description: 'Belirli stok ID\'si' },
-              SirketID: { type: 'string', description: 'Şirket ID filtresi' },
-              SubeID: { type: 'string', description: 'Şube ID filtresi' },
-              Sayfa: { type: 'string', description: 'Sayfa numarası' },
-              SayfaSatirSayisi: { type: 'string', description: 'Sayfa başına kayıt sayısı' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_cari_listele',
-          description: 'ERP sisteminden cari listesini getirir. Filtreleme parametreleri ile arama yapabilirsiniz.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              EsnekAramaKisiti: { type: 'string', description: 'Cari adında, kodunda arama' },
-              CariID: { type: 'string', description: 'Belirli cari ID\'si' },
-              CariKodu: { type: 'string', description: 'Cari kodu' },
-              VergiNo: { type: 'string', description: 'Vergi numarası' },
-              Sayfa: { type: 'string', description: 'Sayfa numarası' },
-              SayfaSatirSayisi: { type: 'string', description: 'Sayfa başına kayıt sayısı' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_depo_listele',
-          description: 'ERP sisteminden depo listesini getirir.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              EsnekAramaKisiti: { type: 'string', description: 'Depo adında, kodunda arama' },
-              DepoID: { type: 'string', description: 'Belirli depo ID\'si' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_seri_lot_listele',
-          description: 'ERP sisteminden seri/lot listesini getirir.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              StokID: { type: 'string', description: 'Stok ID filtresi' },
-              SeriLotKodu: { type: 'string', description: 'Seri/Lot kodu' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_barkod_listele',
-          description: 'ERP sisteminden barkod listesini getirir.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              StokID: { type: 'string', description: 'Stok ID filtresi' },
-              BarkodNo: { type: 'string', description: 'Barkod numarası' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_doviz_listele',
-          description: 'ERP sisteminden döviz listesini getirir.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              DovizID: { type: 'string', description: 'Döviz ID filtresi' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_kasa_listele',
-          description: 'ERP sisteminden kasa listesini getirir.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              KasaID: { type: 'string', description: 'Kasa ID filtresi' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_banka_listele',
-          description: 'ERP sisteminden banka listesini getirir.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              BankaID: { type: 'string', description: 'Banka ID filtresi' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_personel_listele',
-          description: 'ERP sisteminden personel listesini getirir.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              PersonelID: { type: 'string', description: 'Personel ID filtresi' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_stok_olustur',
-          description: 'ERP sisteminde yeni stok kartı oluşturur.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              StokKodu: { type: 'string', description: 'Stok kodu (zorunlu)' },
-              StokAdi: { type: 'string', description: 'Stok adı (zorunlu)' },
-              StokKisaKodu: { type: 'string', description: 'Stok kısa kodu' },
-              StokKisaAdi: { type: 'string', description: 'Stok kısa adı' },
-              TipID: { type: 'string', description: 'Stok tipi (varsayılan: 105001)' },
-              SubeID: { type: 'string', description: 'Şube ID (varsayılan: 1)' },
-              SirketID: { type: 'string', description: 'Şirket ID (varsayılan: 1)' },
-              Brm1ID: { type: 'string', description: 'Birim ID (varsayılan: 1 - Adet)' },
-              StokMuhasebeID: { type: 'string', description: 'Muhasebe ID' },
-              Durum: { type: 'boolean', description: 'Aktif/Pasif durumu (varsayılan: true)' }
-            },
-            required: ['token', 'StokKodu', 'StokAdi'],
-          },
-        },
-        {
-          name: 'erp_cari_olustur',
-          description: 'ERP sisteminde yeni cari kartı oluşturur.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              CariKodu: { type: 'string', description: 'Cari kodu (zorunlu)' },
-              CariAdi: { type: 'string', description: 'Cari adı (zorunlu)' },
-              VergiNo: { type: 'string', description: 'Vergi numarası' },
-              VergiDairesiID: { type: 'string', description: 'Vergi dairesi ID' },
-              TipID: { type: 'string', description: 'Cari tipi (varsayılan: 2001)' },
-              SubeID: { type: 'string', description: 'Şube ID (varsayılan: 1)' },
-              SirketID: { type: 'string', description: 'Şirket ID (varsayılan: 1)' },
-              Durum: { type: 'boolean', description: 'Aktif/Pasif durumu (varsayılan: true)' }
-            },
-            required: ['token', 'CariKodu', 'CariAdi'],
-          },
-        },
-        {
-          name: 'erp_siparis_listele',
-          description: 'ERP sisteminden sipariş hareketlerini listeler.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              EsnekArama: { type: 'string', description: 'Genel arama terimi' },
-              TipID: { type: 'string', description: 'Sipariş tipi (10013: Alınan Sipariş)' },
-              CariID: { type: 'string', description: 'Cari ID filtresi' },
-              StokID: { type: 'string', description: 'Stok ID filtresi' },
-              TarihBas: { type: 'string', description: 'Başlangıç tarihi (YYYY-MM-DD)' },
-              TarihBit: { type: 'string', description: 'Bitiş tarihi (YYYY-MM-DD)' },
-              Sayfa: { type: 'string', description: 'Sayfa numarası' },
-              SayfaSatirSayisi: { type: 'string', description: 'Sayfa başına kayıt sayısı' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_fatura_listele',
-          description: 'ERP sisteminden fatura hareketlerini listeler.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              EsnekArama: { type: 'string', description: 'Genel arama terimi' },
-              TipID: { type: 'string', description: 'Fatura tipi (10005: Satış Faturası, 10006: Alış Faturası)' },
-              CariID: { type: 'string', description: 'Cari ID filtresi' },
-              StokID: { type: 'string', description: 'Stok ID filtresi' },
-              TarihBas: { type: 'string', description: 'Başlangıç tarihi (YYYY-MM-DD)' },
-              TarihBit: { type: 'string', description: 'Bitiş tarihi (YYYY-MM-DD)' },
-              BelgeNo: { type: 'string', description: 'Belge numarası' },
-              Sayfa: { type: 'string', description: 'Sayfa numarası' },
-              SayfaSatirSayisi: { type: 'string', description: 'Sayfa başına kayıt sayısı' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_stok_hareketleri_listele',
-          description: 'ERP sisteminden stok hareketlerini listeler.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              EsnekArama: { type: 'string', description: 'Genel arama terimi' },
-              StokID: { type: 'string', description: 'Stok ID filtresi' },
-              TipID: { type: 'string', description: 'Hareket tipi' },
-              CariID: { type: 'string', description: 'Cari ID filtresi' },
-              DepoID: { type: 'string', description: 'Depo ID filtresi' },
-              TarihBas: { type: 'string', description: 'Başlangıç tarihi (YYYY-MM-DD)' },
-              TarihBit: { type: 'string', description: 'Bitiş tarihi (YYYY-MM-DD)' },
-              Sayfa: { type: 'string', description: 'Sayfa numarası' },
-              SayfaSatirSayisi: { type: 'string', description: 'Sayfa başına kayıt sayısı' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_dekont_listele',
-          description: 'ERP sisteminden dekont başlıklarını listeler.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              BelgeNo: { type: 'string', description: 'Belge numarası filtresi' },
-              TipID: { type: 'string', description: 'Dekont tipi' },
-              TarihBas: { type: 'string', description: 'Başlangıç tarihi (YYYY-MM-DD)' },
-              TarihBit: { type: 'string', description: 'Bitiş tarihi (YYYY-MM-DD)' },
-              Sayfa: { type: 'string', description: 'Sayfa numarası' },
-              SayfaSatirSayisi: { type: 'string', description: 'Sayfa başına kayıt sayısı' }
-            },
-            required: ['token'],
-          },
-        },
-        {
-          name: 'erp_api_cagir',
-          description: 'ERP API\'sine genel amaçlı çağrı yapar. Herhangi bir endpoint\'e istek gönderebilirsiniz.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              token: { type: 'string', description: 'ERP API token (zorunlu)' },
-              endpoint: { type: 'string', description: 'API endpoint (örn: /api/Stok)' },
-              method: { type: 'string', enum: ['GET', 'POST'], description: 'HTTP metodu' },
-              params: { type: 'object', description: 'Query parametreleri' },
-              body: { type: 'object', description: 'POST body verisi' }
-            },
-            required: ['token', 'endpoint'],
-          },
-        },
-      ],
-    }));
+    // Tools listesini dinamik olarak oluştur
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      const tools = Object.entries(this.toolsConfig).map(([name, config]) => ({
+        name,
+        description: config.description,
+        inputSchema: config.inputSchema,
+      }));
+
+      return { tools };
+    });
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
       try {
-        switch (name) {
-          case 'erp_token_al':
-            if (!isValidErpTokenArgs(args)) {
-              throw new McpError(ErrorCode.InvalidParams, 'Geçersiz ERP token parametreleri');
-            }
-            const token = await this.getErpToken(args.password);
-            return {
-              content: [{ type: 'text', text: `ERP Token başarıyla alındı: ${token}` }],
-            };
-
-          case 'erp_stok_listele':
-            return await this.callErpApi('/api/Stok', 'GET', args);
-
-          case 'erp_cari_listele':
-            return await this.callErpApi('/api/Cari/', 'GET', args);
-
-          case 'erp_depo_listele':
-            return await this.callErpApi('/api/Depo', 'GET', args);
-
-          case 'erp_seri_lot_listele':
-            return await this.callErpApi('/api/SeriLot', 'GET', args);
-
-          case 'erp_barkod_listele':
-            return await this.callErpApi('/api/StokBarkod', 'GET', args);
-
-          case 'erp_doviz_listele':
-            return await this.callErpApi('/api/Doviz', 'GET', args);
-
-          case 'erp_kasa_listele':
-            return await this.callErpApi('/api/Kasa/GetKayit', 'GET', args);
-
-          case 'erp_banka_listele':
-            return await this.callErpApi('/api/Banka/GetKayit', 'GET', args);
-
-          case 'erp_personel_listele':
-            return await this.callErpApi('/api/Personel/Get', 'GET', args);
-
-          case 'erp_stok_olustur':
-            return await this.createStok(args);
-
-          case 'erp_cari_olustur':
-            return await this.createCari(args);
-
-          case 'erp_siparis_listele':
-            return await this.callErpApi('/api/SipStokHareketleri', 'GET', args);
-
-          case 'erp_fatura_listele':
-            return await this.callErpApi('/api/StokHareketleri', 'GET', args);
-
-          case 'erp_stok_hareketleri_listele':
-            return await this.callErpApi('/api/StokHareketleri', 'GET', args);
-
-          case 'erp_dekont_listele':
-            return await this.callErpApi('/api/Dekont/Basliklar', 'GET', args);
-
-          case 'erp_api_cagir':
-            if (!isValidErpApiArgs(args)) {
-              throw new McpError(ErrorCode.InvalidParams, 'Geçersiz API çağrı parametreleri');
-            }
-            return await this.callErpApi(args.endpoint, args.method || 'GET', args);
-
-          default:
-            throw new McpError(ErrorCode.MethodNotFound, `Bilinmeyen araç: ${name}`);
+        const toolConfig = this.toolsConfig[name];
+        if (!toolConfig) {
+          throw new McpError(ErrorCode.MethodNotFound, `Bilinmeyen araç: ${name}`);
         }
+
+        // Request bilgilerini logla
+        this.log(`Tool çağrısı: ${name}`, 'info', { 
+          tool: name, 
+          params: args 
+        });
+
+        // Özel handler varsa onu kullan
+        if (toolConfig.handler) {
+          return await this.callSpecialHandler(toolConfig.handler, args);
+        }
+
+        // Normal API çağrısı
+        if (toolConfig.endpoint && toolConfig.method) {
+          return await this.callErpApi(toolConfig.endpoint, toolConfig.method as 'GET' | 'POST', args);
+        }
+
+        throw new McpError(ErrorCode.InternalError, `Tool konfigürasyonu eksik: ${name}`);
+
       } catch (error) {
+        this.log(`Tool hatası: ${name}`, 'error', error);
         return {
           content: [
             {
@@ -433,6 +199,37 @@ class ErpTokenServer {
     });
   }
 
+  private async callSpecialHandler(handlerName: string, args: any) {
+    switch (handlerName) {
+      case 'getErpToken':
+        if (!isValidErpTokenArgs(args)) {
+          throw new McpError(ErrorCode.InvalidParams, 'Geçersiz ERP token parametreleri');
+        }
+        const token = await this.getErpToken(args.password);
+        return {
+          content: [{ type: 'text', text: `ERP Token başarıyla alındı: ${token}` }],
+        };
+
+      case 'deleteToken':
+        return await this.deleteToken();
+
+      case 'createStok':
+        return await this.createStok(args);
+
+      case 'createCari':
+        return await this.createCari(args);
+
+      case 'callErpApi':
+        if (!isValidErpApiArgs(args)) {
+          throw new McpError(ErrorCode.InvalidParams, 'Geçersiz API çağrı parametreleri');
+        }
+        return await this.callErpApi(args.endpoint!, args.method || 'GET', args);
+
+      default:
+        throw new McpError(ErrorCode.MethodNotFound, `Bilinmeyen handler: ${handlerName}`);
+    }
+  }
+
   // Token cache metodları
   private loadTokenCache(): TokenCache | null {
     try {
@@ -441,7 +238,7 @@ class ErpTokenServer {
         return JSON.parse(data);
       }
     } catch (error) {
-      console.error('Token cache okuma hatası:', error);
+      this.log('Token cache okuma hatası', 'error', error);
     }
     return null;
   }
@@ -451,14 +248,14 @@ class ErpTokenServer {
       const now = Date.now();
       const cache: TokenCache = {
         token,
-        expiresAt: now + (expiresInMinutes * 700 * 1000),
+        expiresAt: now + (expiresInMinutes * 60 * 1000),
         createdAt: now
       };
       
       fs.writeFileSync(this.tokenCacheFile, JSON.stringify(cache, null, 2));
-      console.error(`Token cache'e kaydedildi. Süre: ${expiresInMinutes} dakika`);
+      this.log(`Token cache'e kaydedildi. Süre: ${expiresInMinutes} dakika`);
     } catch (error) {
-      console.error('Token cache kaydetme hatası:', error);
+      this.log('Token cache kaydetme hatası', 'error', error);
     }
   }
 
@@ -470,12 +267,12 @@ class ErpTokenServer {
     const isValid = now < cache.expiresAt;
     
     if (!isValid) {
-      console.error('Token süresi dolmuş, yeni token gerekli');
+      this.log('Token süresi dolmuş, yeni token gerekli');
       // Süresi dolmuş cache'i sil
       try {
         fs.unlinkSync(this.tokenCacheFile);
       } catch (error) {
-        console.error('Eski token cache silme hatası:', error);
+        this.log('Eski token cache silme hatası', 'error', error);
       }
     }
     
@@ -487,11 +284,39 @@ class ErpTokenServer {
       const cache = this.loadTokenCache();
       if (cache) {
         const remainingMinutes = Math.floor((cache.expiresAt - Date.now()) / (60 * 1000));
-        console.error(`Cached token kullanılıyor. Kalan süre: ${remainingMinutes} dakika`);
+        this.log(`Cached token kullanılıyor. Kalan süre: ${remainingMinutes} dakika`);
         return cache.token;
       }
     }
     return null;
+  }
+
+  private async deleteToken() {
+    try {
+      if (fs.existsSync(this.tokenCacheFile)) {
+        fs.unlinkSync(this.tokenCacheFile);
+        this.log('Token cache başarıyla silindi');
+        return {
+          content: [{ type: 'text', text: 'Token cache başarıyla silindi. Yeni API çağrıları için yeni token alınması gerekecek.' }],
+        };
+      } else {
+        this.log('Silinecek token cache bulunamadı');
+        return {
+          content: [{ type: 'text', text: 'Silinecek token cache bulunamadı. Cache zaten boş.' }],
+        };
+      }
+    } catch (error) {
+      this.log('Token cache silme hatası', 'error', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Token cache silme hatası: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}`,
+          },
+        ],
+        isError: true,
+      };
+    }
   }
 
   private async createStok(args: any) {
@@ -556,15 +381,16 @@ class ErpTokenServer {
     if (!token) {
       throw new Error('Token gerekli');
     }
-
+    
     try {
       const config: any = {
         method,
-        url: `https://erp.aaro.com.tr${endpoint}`,
+        url: `${this.settings.erp.baseUrl}${endpoint}`,
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
+          ...this.settings.api.defaultHeaders,
         },
+        timeout: this.settings.api.timeout,
       };
 
       if (method === 'GET') {
@@ -595,9 +421,18 @@ class ErpTokenServer {
         }
       }
 
-      console.error(`ERP API çağrısı: ${method} ${endpoint}`);
+      this.log(`ERP API çağrısı: ${method} ${endpoint}`, 'info', {
+        url: config.url,
+        method: config.method,
+        params: config.params
+      });
       
       const response = await axios(config);
+      
+      this.log(`ERP API başarılı: ${method} ${endpoint}`, 'info', {
+        status: response.status,
+        dataLength: JSON.stringify(response.data).length
+      });
       
       return {
         content: [
@@ -625,6 +460,8 @@ class ErpTokenServer {
         errorMessage = error.message;
       }
 
+      this.log(`ERP API hatası: ${method} ${endpoint}`, 'error', { error: errorMessage });
+
       return {
         content: [
           {
@@ -644,24 +481,24 @@ class ErpTokenServer {
       return cachedToken;
     }
 
-    console.error('Cache\'de geçerli token bulunamadı, yeni token alınıyor...');
+    this.log('Cache\'de geçerli token bulunamadı, yeni token alınıyor...');
 
     try {
       // Tarayıcıyı başlat
       this.browser = await puppeteer.launch({
-        headless: false, // Kullanıcının görebilmesi için görünür mod
-        defaultViewport: null,
-        args: ['--start-maximized']
+        headless: this.settings.browser.headless,
+        defaultViewport: this.settings.browser.defaultViewport,
+        args: this.settings.browser.args
       });
 
       const page = await this.browser.newPage();
       
       // ERP URL'sine git
-      await page.goto('https://erp.aaro.com.tr/Account/GeciciErisimAnahtari?', {
+      await page.goto(this.settings.erp.loginUrl, {
         waitUntil: 'networkidle2'
       });
 
-      console.error('ERP sayfası açıldı, kullanıcı girişi bekleniyor...');
+      this.log('ERP sayfası açıldı, kullanıcı girişi bekleniyor...');
 
       // Eğer şifre verilmişse otomatik doldur
       if (password) {
@@ -679,7 +516,7 @@ class ErpTokenServer {
             try {
               await page.waitForSelector(selector, { timeout: 2000 });
               await page.type(selector, password);
-              console.error('Şifre otomatik olarak girildi');
+              this.log('Şifre otomatik olarak girildi');
               break;
             } catch (e) {
               // Bu selektör bulunamadı, diğerini dene
@@ -687,34 +524,34 @@ class ErpTokenServer {
             }
           }
         } catch (e) {
-          console.error('Şifre alanı bulunamadı, kullanıcı manuel girmeli');
+          this.log('Şifre alanı bulunamadı, kullanıcı manuel girmeli');
         }
       }
 
-      // #anahtar elementinin görünmesini bekle
-      console.error('#anahtar elementi bekleniyor...');
+      // Token elementinin görünmesini bekle
+      this.log('Token elementi bekleniyor...');
       
-      await page.waitForSelector('#anahtar', {
+      await page.waitForSelector(this.settings.erp.tokenSelector, {
         visible: true,
-        timeout: 300000 // 5 dakika timeout
+        timeout: this.settings.browser.timeout
       });
 
-      console.error('#anahtar elementi bulundu, token alınıyor...');
+      this.log('Token elementi bulundu, token alınıyor...');
 
       // Token'i al
-      const token = await page.$eval('#anahtar', (element) => {
+      const token = await page.$eval(this.settings.erp.tokenSelector, (element) => {
         return element.textContent || element.getAttribute('value') || '';
       });
 
       if (!token || token.trim() === '') {
-        throw new Error('#anahtar elementinde token bulunamadı');
+        throw new Error('Token elementinde token bulunamadı');
       }
 
       const cleanToken = token.trim();
-      console.error(`Token başarıyla alındı: ${cleanToken}`);
+      this.log(`Token başarıyla alındı: ${cleanToken}`);
 
-      // Token'i cache'e kaydet (60 dakika geçerlilik süresi)
-      this.saveTokenCache(cleanToken, 60);
+      // Token'i cache'e kaydet
+      this.saveTokenCache(cleanToken, this.settings.erp.tokenCacheMinutes);
 
       // Tarayıcıyı kapat
       await this.browser.close();
@@ -736,7 +573,7 @@ class ErpTokenServer {
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('ERP Token MCP server stdio üzerinde çalışıyor');
+    this.log('ERP Token MCP server stdio üzerinde çalışıyor');
   }
 }
 

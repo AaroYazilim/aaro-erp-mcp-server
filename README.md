@@ -8,11 +8,6 @@ AARO ERP sistemi için Claude Desktop entegrasyonu sağlayan MCP (Model Context 
 
 ## ✨ Özellikler
 
-### 🔐 **Akıllı Token Yönetimi**
-- 🤖 **Otomatik Token Alma** - Puppeteer ile tarayıcı otomasyonu
-- 💾 **Token Cache Sistemi** - 60 dakika boyunca otomatik saklama
-- ⚡ **Hızlı Erişim** - Cache'den token kullanımı ile hızlı API çağrıları
-- 🔄 **Otomatik Yenileme** - Süre dolduğunda otomatik token yenileme
 
 ### 📊 **Stok Yönetimi**
 - 📋 `erp_stok_listele` - Gelişmiş filtreleme ile stok listeleme
@@ -54,21 +49,7 @@ AARO ERP sistemi için Claude Desktop entegrasyonu sağlayan MCP (Model Context 
 
 ### 📦 Kurulum
 
-1. **Repository'yi klonlayın:**
-```bash
-git clone https://github.com/ysfkarakaya/aaro-erp-mcp-server.git
-cd aaro-erp-mcp-server
-```
-
-2. **Bağımlılıkları yükleyin:**
-```bash
-npm install
-```
-
-3. **Projeyi derleyin:**
-```bash
-npm run build
-```
+**Kurulum gerekmez!** NPX ile doğrudan kullanabilirsiniz. Paket otomatik olarak indirilir ve çalıştırılır.
 
 ### ⚙️ Claude Desktop Konfigürasyonu
 
@@ -95,20 +76,21 @@ Aşağıdaki konfigürasyonu ekleyin:
 {
   "mcpServers": {
     "aaro-erp": {
-      "command": "node",
-      "args": ["/FULL/PATH/TO/aaro-erp-mcp-server/build/index.js"],
-      "disabled": false,
-      "autoApprove": []
+      "command": "npx",
+      "args": ["aaro-erp-mcp-server"],
+      "disabled": false
     }
   }
 }
 ```
 
-> **Not:** `/FULL/PATH/TO/aaro-erp-mcp-server` kısmını projeyi klonladığınız tam yol ile değiştirin.
-
 ### 🔄 Claude Desktop'ı Yeniden Başlatın
 
 Konfigürasyon değişikliklerinin etkili olması için Claude Desktop'ı kapatıp yeniden açın.
+
+### ✅ Kurulum Tamamlandı!
+
+Artık Claude Desktop'ta AARO ERP araçlarını kullanabilirsiniz. İlk kullanımda paket otomatik olarak NPM'den indirilecektir.
 
 ## 🎯 Kullanım Örnekleri
 
@@ -117,11 +99,6 @@ Konfigürasyon değişikliklerinin etkili olması için Claude Desktop'ı kapat�
 erp_token_al aracını kullan
 ```
 
-**💡 Token Cache Sistemi:**
-- İlk token alımından sonra, token otomatik olarak 60 dakika boyunca saklanır
-- Sonraki `erp_token_al` çağrılarında, geçerli token varsa tarayıcı açılmaz
-- Token süresi dolduğunda otomatik olarak yeni token alınır
-- Cache dosyası: `token-cache.json` (proje dizininde)
 
 ### 2. Stok Listeleme
 ```
@@ -220,30 +197,24 @@ Tüm listeleme araçları gelişmiş filtreleme destekler:
 
 ## 📝 API Endpoint'leri
 
-- **Base URL**: `https://erp.aaro.com.tr`
+- **Base URL**: `https://erp.aaro.com.tr/api`
 - **Token URL**: `https://erp.aaro.com.tr/Account/GeciciErisimAnahtari`
-- **API Prefix**: `/api/`
 
 ## 🐛 Hata Ayıklama
 
-Server logları için terminal çıktısını kontrol edin:
+Server logları Claude Desktop'ın developer console'unda görüntülenir. Manuel test için:
+
 ```bash
-node build/index.js
+npx aaro-erp-mcp-server
 ```
 
 ## 🔧 Geliştirme
 
-### Proje Yapısı
-```
-aaro-erp-mcp-server/
-├── src/
-│   └── index.ts          # Ana server dosyası
-├── build/                # Derlenmiş JavaScript dosyaları
-├── package.json          # Proje bağımlılıkları
-├── tsconfig.json         # TypeScript konfigürasyonu
-├── token-cache.json      # Token cache dosyası (otomatik oluşur)
-└── README.md            # Bu dosya
-```
+### NPM Paketi Bilgileri
+- **Paket Adı**: `aaro-erp-mcp-server`
+- **Platform Desteği**: Windows, macOS, Linux
+- **Node.js Gereksinimi**: v18+
+- **Otomatik Güncellemeler**: NPX her çalıştırmada en son sürümü kullanır
 
 ### Katkıda Bulunma
 
@@ -259,10 +230,11 @@ Server'ın çalışıp çalışmadığını test etmek için:
 
 ```bash
 # Server'ı manuel olarak başlatın
-node build/index.js
+npx aaro-erp-mcp-server
 
 # Başarılı çıktı:
-# ERP Token MCP server stdio üzerinde çalışıyor
+# [2025-07-21T06:59:59.000Z] [INFO] Konfigürasyon dosyaları başarıyla yüklendi
+# [2025-07-21T06:59:59.000Z] [INFO] ERP Token MCP server stdio üzerinde çalışıyor
 ```
 
 ## 🚨 Sorun Giderme
@@ -271,29 +243,46 @@ node build/index.js
 
 **1. "Server disconnected" hatası:**
 - Node.js versiyonunun v18+ olduğundan emin olun
-- `npm run build` komutunu çalıştırın
+- İnternet bağlantınızı kontrol edin
 - Claude Desktop'ı yeniden başlatın
 
-**2. Token alınamıyor:**
+**2. "Package not found" hatası:**
+- NPM'in düzgün kurulu olduğundan emin olun
+- `npm cache clean --force` komutunu çalıştırın
+- Tekrar deneyin
+
+**3. Token alınamıyor:**
 - AARO ERP hesabınızın aktif olduğundan emin olun
 - İnternet bağlantınızı kontrol edin
 - Tarayıcı popup'larının engellenip engellenmediğini kontrol edin
 
-**3. MCP server görünmüyor:**
+**4. MCP server görünmüyor:**
 - Konfigürasyon dosyasının doğru konumda olduğundan emin olun
 - JSON formatının geçerli olduğunu kontrol edin
-- Dosya yolunun doğru olduğundan emin olun
+- `npx aaro-erp-mcp-server` komutunun çalıştığından emin olun
 
-### Log Dosyaları
+### Manuel Test
 
-Detaylı hata ayıklama için server loglarını kontrol edin:
+Paketi manuel olarak test etmek için:
 
 ```bash
-# Windows
-node build/index.js 2>&1 | tee debug.log
+# Paketi çalıştır
+npx aaro-erp-mcp-server
 
-# macOS/Linux  
-node build/index.js 2>&1 | tee debug.log
+# Başka bir terminalde test
+echo '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}' | npx aaro-erp-mcp-server
+```
+
+### Cache Temizleme
+
+NPX cache'ini temizlemek için:
+
+```bash
+# NPX cache temizle
+npm cache clean --force
+
+# Belirli paketi temizle
+npx clear-npx-cache aaro-erp-mcp-server
 ```
 
 ## 📋 Mevcut Araçlar Listesi
@@ -301,6 +290,7 @@ node build/index.js 2>&1 | tee debug.log
 | Araç Adı | Açıklama | Kategori |
 |-----------|----------|----------|
 | `erp_token_al` | Token alma ve cache yönetimi | 🔐 Token |
+| `erp_token_sil` | Token cache silme | 🔐 Token |
 | `erp_stok_listele` | Stok listesi ve filtreleme | 📊 Stok |
 | `erp_stok_olustur` | Yeni stok kartı oluşturma | 📊 Stok |
 | `erp_stok_hareketleri_listele` | Stok hareketleri | 📊 Stok |
@@ -318,7 +308,7 @@ node build/index.js 2>&1 | tee debug.log
 | `erp_dekont_listele` | Muhasebe dekontları | 🏢 Operasyon |
 | `erp_api_cagir` | Genel API çağrısı | 🔧 Genel |
 
-**Toplam: 17 araç**
+**Toplam: 18 araç**
 
 ## 🔄 Sürüm Geçmişi
 
@@ -342,10 +332,7 @@ Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICE
 
 ## 📞 Destek ve İletişim
 
-- 🐛 **Bug Report**: [GitHub Issues](https://github.com/ysfkarakaya/aaro-erp-mcp-server/issues)
-- 💡 **Feature Request**: [GitHub Discussions](https://github.com/ysfkarakaya/aaro-erp-mcp-server/discussions)
-- 📧 **Email**: your-email@example.com
+- 🐛 **Bug Report**: [GitHub Issues](https://github.com/AaroYazilim/aaro-erp-mcp-server/issues)
+- 💡 **Feature Request**: [GitHub Discussions](https://github.com/AaroYazilim/aaro-erp-mcp-server/discussions)
+- 📧 **Email**: info@aaro.com.tr
 
----
-
-⭐ Bu projeyi beğendiyseniz yıldız vermeyi unutmayın!
