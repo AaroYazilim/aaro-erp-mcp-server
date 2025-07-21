@@ -6,38 +6,32 @@
 
 AARO ERP sistemi için Claude Desktop entegrasyonu sağlayan MCP (Model Context Protocol) server'ı. Bu server, AARO ERP API'sine erişim, token yönetimi ve tüm temel ERP işlemlerini Claude Desktop üzerinden gerçekleştirmenizi sağlar.
 
-## ✨ Özellikler
 
+## 📋 Mevcut Araçlar Listesi
 
-### 📊 **Stok Yönetimi**
-- 📋 `erp_stok_listele` - Gelişmiş filtreleme ile stok listeleme
-- ➕ `erp_stok_olustur` - Yeni stok kartı oluşturma
-- 📈 `erp_stok_hareketleri_listele` - Stok hareket takibi
-- 🏷️ `erp_seri_lot_listele` - Seri/Lot numarası yönetimi
-- 📱 `erp_barkod_listele` - Barkod sistemi entegrasyonu
+| Araç Adı | Açıklama | Kategori |
+|-----------|----------|----------|
+| `erp_token_al` | Token alma ve cache yönetimi | 🔐 Token |
+| `erp_token_sil` | Token cache silme | 🔐 Token |
+| `erp_stok_listele` | Stok listesi ve filtreleme | 📊 Stok |
+| `erp_stok_olustur` | Yeni stok kartı oluşturma | 📊 Stok |
+| `erp_stok_hareketleri_listele` | Stok hareketleri | 📊 Stok |
+| `erp_seri_lot_listele` | Seri/Lot takibi | 📊 Stok |
+| `erp_barkod_listele` | Barkod yönetimi | 📊 Stok |
+| `erp_cari_listele` | Cari hesap listeleme | 👥 Cari |
+| `erp_cari_olustur` | Yeni cari hesap oluşturma | 👥 Cari |
+| `erp_siparis_listele` | Sipariş hareketleri | 📋 Sipariş |
+| `erp_fatura_listele` | Fatura hareketleri | 📋 Fatura |
+| `erp_depo_listele` | Depo yönetimi | 🏢 Operasyon |
+| `erp_doviz_listele` | Döviz kurları | 🏢 Operasyon |
+| `erp_kasa_listele` | Kasa hareketleri | 🏢 Operasyon |
+| `erp_banka_listele` | Banka hesapları | 🏢 Operasyon |
+| `erp_personel_listele` | Personel bilgileri | 🏢 Operasyon |
+| `erp_dekont_listele` | Muhasebe dekontları | 🏢 Operasyon |
+| `erp_api_cagir` | Genel API çağrısı | 🔧 Genel |
 
-### 👥 **Cari Yönetimi**
-- 📇 `erp_cari_listele` - Müşteri/Tedarikçi listeleme
-- ➕ `erp_cari_olustur` - Yeni cari hesap oluşturma
-- 🔍 Vergi numarası ile arama
-- 📊 Gelişmiş filtreleme seçenekleri
+**Toplam: 18 araç**
 
-### 📋 **Sipariş ve Fatura İşlemleri**
-- 🛒 `erp_siparis_listele` - Sipariş takibi ve yönetimi
-- 🧾 `erp_fatura_listele` - Fatura listeleme ve arama
-- 📅 Tarih aralığı filtreleme
-- 🔢 Belge numarası ile arama
-
-### 🏢 **Operasyonel Modüller**
-- 🏪 `erp_depo_listele` - Depo yönetimi
-- 💱 `erp_doviz_listele` - Döviz kuru takibi
-- 💰 `erp_kasa_listele` - Kasa hareketleri
-- 🏦 `erp_banka_listele` - Banka hesap yönetimi
-- 👨‍💼 `erp_personel_listele` - Personel bilgileri
-- 📄 `erp_dekont_listele` - Muhasebe dekontları
-
-### 🔧 **Genel API Araçları**
-- 🌐 `erp_api_cagir` - Herhangi bir AARO ERP endpoint'ine doğrudan erişim
 
 ## 🚀 Hızlı Başlangıç
 
@@ -91,66 +85,7 @@ Konfigürasyon değişikliklerinin etkili olması için Claude Desktop'ı kapat�
 ### ✅ Kurulum Tamamlandı!
 
 Artık Claude Desktop'ta AARO ERP araçlarını kullanabilirsiniz. İlk kullanımda paket otomatik olarak NPM'den indirilecektir.
-
-## 🎯 Kullanım Örnekleri
-
-### 1. Token Alma
-```
-erp_token_al aracını kullan
-```
-
-
-### 2. Stok Listeleme
-```
-erp_stok_listele aracını kullan:
-- token: "alınan_token"
-- EsnekAramaKisiti: "bilgisayar"
-- Sayfa: "1"
-- SayfaSatirSayisi: "10"
-```
-
-### 3. Yeni Stok Kartı Oluşturma
-```
-erp_stok_olustur aracını kullan:
-- token: "alınan_token"
-- StokKodu: "STK001"
-- StokAdi: "Test Ürünü"
-- StokKisaKodu: "TST"
-- StokKisaAdi: "Test"
-```
-
-### 4. Cari Listeleme
-```
-erp_cari_listele aracını kullan:
-- token: "alınan_token"
-- VergiNo: "1234567890"
-```
-
-### 5. Yeni Cari Kartı Oluşturma
-```
-erp_cari_olustur aracını kullan:
-- token: "alınan_token"
-- CariKodu: "CRI001"
-- CariAdi: "Test Müşteri"
-- VergiNo: "1234567890"
-```
-
-### 6. Sipariş Listeleme
-```
-erp_siparis_listele aracını kullan:
-- token: "alınan_token"
-- TipID: "10013"
-- TarihBas: "2024-01-01"
-- TarihBit: "2024-12-31"
-```
-
-### 7. Fatura Listeleme
-```
-erp_fatura_listele aracını kullan:
-- token: "alınan_token"
-- TipID: "10005"
-- BelgeNo: "FAT001"
-```
+ 
 
 ## 🔍 Filtreleme Özellikleri
 
@@ -284,31 +219,6 @@ npm cache clean --force
 # Belirli paketi temizle
 npx clear-npx-cache aaro-erp-mcp-server
 ```
-
-## 📋 Mevcut Araçlar Listesi
-
-| Araç Adı | Açıklama | Kategori |
-|-----------|----------|----------|
-| `erp_token_al` | Token alma ve cache yönetimi | 🔐 Token |
-| `erp_token_sil` | Token cache silme | 🔐 Token |
-| `erp_stok_listele` | Stok listesi ve filtreleme | 📊 Stok |
-| `erp_stok_olustur` | Yeni stok kartı oluşturma | 📊 Stok |
-| `erp_stok_hareketleri_listele` | Stok hareketleri | 📊 Stok |
-| `erp_seri_lot_listele` | Seri/Lot takibi | 📊 Stok |
-| `erp_barkod_listele` | Barkod yönetimi | 📊 Stok |
-| `erp_cari_listele` | Cari hesap listeleme | 👥 Cari |
-| `erp_cari_olustur` | Yeni cari hesap oluşturma | 👥 Cari |
-| `erp_siparis_listele` | Sipariş hareketleri | 📋 Sipariş |
-| `erp_fatura_listele` | Fatura hareketleri | 📋 Fatura |
-| `erp_depo_listele` | Depo yönetimi | 🏢 Operasyon |
-| `erp_doviz_listele` | Döviz kurları | 🏢 Operasyon |
-| `erp_kasa_listele` | Kasa hareketleri | 🏢 Operasyon |
-| `erp_banka_listele` | Banka hesapları | 🏢 Operasyon |
-| `erp_personel_listele` | Personel bilgileri | 🏢 Operasyon |
-| `erp_dekont_listele` | Muhasebe dekontları | 🏢 Operasyon |
-| `erp_api_cagir` | Genel API çağrısı | 🔧 Genel |
-
-**Toplam: 18 araç**
 
 ## 🔄 Sürüm Geçmişi
 
