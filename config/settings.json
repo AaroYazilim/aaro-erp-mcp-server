@@ -1,6 +1,6 @@
 {
   "server": {
-    "name": "aaro-erp-mcp-serverr",
+    "name": "aaro-erp-mcp-server",
     "version": "1.0.0"
   },
   "erp": {
