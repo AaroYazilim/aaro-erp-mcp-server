@@ -11,6 +11,7 @@ import puppeteer, { Browser, Page } from 'puppeteer';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
@@ -26,13 +27,17 @@ interface ErpApiArgs {
   method?: 'GET' | 'POST';
   params?: Record<string, any>;
   body?: any;
-  token?: string;
 }
 
 interface TokenCache {
   token: string;
   expiresAt: number;
   createdAt: number;
+  user?: string;
+  validFrom?: string;
+  validTo?: string;
+  group?: string;
+  rawText?: string;
 }
 
 interface ToolConfig {
@@ -82,6 +87,7 @@ class ErpTokenServer {
   private tokenCacheFile: string;
   private toolsConfig: Record<string, ToolConfig> = {};
   private settings: Settings = {} as Settings;
+  private tempUserDataDir: string | null = null;
 
   constructor() {
     // Konfigürasyon dosyalarını yükle
@@ -136,12 +142,22 @@ class ErpTokenServer {
     console.error(`[${timestamp}] [${level.toUpperCase()}] ${message}`, data || '');
   }
 
-
   private async cleanup() {
     if (this.browser) {
       await this.browser.close();
       this.browser = null;
     }
+    
+    // Geçici profil dizinini temizle
+    if (this.tempUserDataDir && fs.existsSync(this.tempUserDataDir)) {
+      try {
+        fs.rmSync(this.tempUserDataDir, { recursive: true, force: true });
+        this.log('Geçici profil dizini temizlendi');
+      } catch (error) {
+        this.log('Geçici profil dizini temizleme hatası', 'warn', error);
+      }
+    }
+    
     await this.server.close();
   }
 
@@ -213,11 +229,26 @@ class ErpTokenServer {
       case 'deleteToken':
         return await this.deleteToken();
 
+      case 'addManualToken':
+        return await this.addManualToken(args);
+
       case 'createStok':
         return await this.createStok(args);
 
       case 'createCari':
         return await this.createCari(args);
+
+      case 'createDekont':
+        return await this.createDekont(args);
+
+      case 'addDekontKalem':
+        return await this.addDekontKalem(args);
+
+      case 'updateDekont':
+        return await this.updateDekont(args);
+
+      case 'testWebhook':
+        return await this.testWebhook(args);
 
       case 'callErpApi':
         if (!isValidErpApiArgs(args)) {
@@ -243,12 +274,12 @@ class ErpTokenServer {
     return null;
   }
 
-  private saveTokenCache(token: string, expiresInMinutes: number = 60): void {
+  private saveTokenCache(token: string, expiresInMinutes: number = 720): void {
     try {
       const now = Date.now();
       const cache: TokenCache = {
         token,
-        expiresAt: now + (expiresInMinutes * 60 * 1000),
+        expiresAt: now + (expiresInMinutes * 720 * 1000),
         createdAt: now
       };
       
@@ -319,11 +350,63 @@ class ErpTokenServer {
     }
   }
 
+  private async addManualToken(args: any) {
+    try {
+      const { tokenText } = args;
+      
+      if (!tokenText || typeof tokenText !== 'string') {
+        throw new Error('tokenText parametresi gerekli ve string olmalı');
+      }
+
+      this.log('Manuel token ekleme işlemi başlıyor', 'info', { 
+        tokenTextLength: tokenText.length 
+      });
+
+      // Token bilgilerini parse et
+      const tokenInfo = this.parseTokenInfo(tokenText);
+      
+      if (!tokenInfo.token) {
+        throw new Error('Token parse edilemedi');
+      }
+
+      // Token'i cache'e kaydet
+      this.saveTokenCacheWithInfo(tokenInfo);
+
+      this.log('Manuel token başarıyla eklendi', 'info', {
+        user: tokenInfo.user,
+        validFrom: tokenInfo.validFrom,
+        validTo: tokenInfo.validTo,
+        group: tokenInfo.group,
+        tokenLength: tokenInfo.token.length
+      });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Manuel token başarıyla cache'e eklendi!\n\nKullanıcı: ${tokenInfo.user || 'Bulunamadı'}\nGeçerlilik Başlangıç: ${tokenInfo.validFrom || 'Bulunamadı'}\nGeçerlilik Bitiş: ${tokenInfo.validTo || 'Bulunamadı'}\nGrup: ${tokenInfo.group || 'Bulunamadı'}\nToken Uzunluğu: ${tokenInfo.token.length} karakter\n\nToken artık API çağrılarında kullanılabilir.`,
+          },
+        ],
+      };
+    } catch (error) {
+      this.log('Manuel token ekleme hatası', 'error', error);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Manuel token ekleme hatası: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
   private async createStok(args: any) {
-    const { token, StokKodu, StokAdi, StokKisaKodu, StokKisaAdi, TipID, SubeID, SirketID, Brm1ID, StokMuhasebeID, Durum, ...otherParams } = args;
+    const { StokKodu, StokAdi, StokKisaKodu, StokKisaAdi, TipID, SubeID, SirketID, Brm1ID, StokMuhasebeID, Durum, ...otherParams } = args;
     
-    if (!token || !StokKodu || !StokAdi) {
-      throw new Error('Token, StokKodu ve StokAdi gerekli');
+    if (!StokKodu || !StokAdi) {
+      throw new Error('StokKodu ve StokAdi gerekli');
     }
 
     const stokData = {
@@ -342,17 +425,16 @@ class ErpTokenServer {
     };
 
     return await this.callErpApi('/api/Stok', 'POST', {
-      token,
       KayitTipi: '1', // Yeni kayıt
       body: stokData
     });
   }
 
   private async createCari(args: any) {
-    const { token, CariKodu, CariAdi, VergiNo, VergiDairesiID, TipID, SubeID, SirketID, Durum, ...otherParams } = args;
+    const { CariKodu, CariAdi, VergiNo, VergiDairesiID, TipID, SubeID, SirketID, Durum, ...otherParams } = args;
     
-    if (!token || !CariKodu || !CariAdi) {
-      throw new Error('Token, CariKodu ve CariAdi gerekli');
+    if (!CariKodu || !CariAdi) {
+      throw new Error('CariKodu ve CariAdi gerekli');
     }
 
     const cariData = {
@@ -369,34 +451,276 @@ class ErpTokenServer {
     };
 
     return await this.callErpApi('/api/Cari', 'POST', {
-      token,
       KayitTipi: '1', // Yeni kayıt
       body: cariData
     });
   }
 
-  private async callErpApi(endpoint: string, method: 'GET' | 'POST', args: any) {
-    const { token, ...params } = args;
+  private async createDekont(args: any) {
+    const { TipID, Tarih, BelgeNo, Vade, SirketID, SubeID, RefDepoID, CariID, DovizID, Aciklama } = args;
     
-    if (!token) {
-      throw new Error('Token gerekli');
+    if (!TipID || !Tarih || !BelgeNo || !CariID) {
+      throw new Error('TipID, Tarih, BelgeNo ve CariID gerekli');
     }
+
+    const dekontData = {
+      Baslik: {
+        Tarih,
+        BelgeNo,
+        Vade: Vade || Tarih,
+        TipID: parseInt(TipID),
+        SirketID: parseInt(SirketID || '1'),
+        SubeID: parseInt(SubeID || '1'),
+        RefDepoID: parseInt(RefDepoID || '1')
+      },
+      KalemTek: {
+        KalemTipi: 4, // Cari olduğunu gösterir
+        KartID: parseInt(CariID),
+        DovizID: parseInt(DovizID || '1'),
+        Aciklama: Aciklama || ''
+      }
+    };
+
+    this.log('Dekont oluşturuluyor', 'info', dekontData);
+
+    return await this.callErpApi('/api/Dekont/Baslik', 'POST', {
+      KayitTipi: '1',
+      body: dekontData
+    });
+  }
+
+  private async addDekontKalem(args: any) {
+    const { 
+      DekontID, 
+      StokID, 
+      Miktar, 
+      Tutar, 
+      DovizID, 
+      TutarDvz, 
+      BA, 
+      DepoID, 
+      TeslimTarihi, 
+      VergiID, 
+      VergiOrani 
+    } = args;
     
+    if (!DekontID || !StokID || !Miktar || !Tutar) {
+      throw new Error('DekontID, StokID, Miktar ve Tutar gerekli');
+    }
+
+    const kalemData = {
+      KalemTipi: 7, // Sabit değer
+      DekontID: parseInt(DekontID),
+      KartID: parseInt(StokID),
+      Miktar: parseFloat(Miktar),
+      Tutar: parseFloat(Tutar),
+      DovizID: parseInt(DovizID || '1'),
+      TutarDvz: parseFloat(TutarDvz || '0'),
+      BA: BA || 'A',
+      SiparisStok: {
+        DepoID: parseInt(DepoID || '1'),
+        TeslimTarihi: TeslimTarihi || new Date().toISOString().split('T')[0],
+        VergiDetaylari: [
+          {
+            VergiID: parseInt(VergiID || '1'),
+            Oran: parseFloat(VergiOrani || '20'),
+            Tutar: parseFloat(Tutar) * (parseFloat(VergiOrani || '20') / 100),
+            TutarDvz: 0,
+            DovizID: parseInt(DovizID || '1'),
+            Matrah: parseFloat(Tutar),
+            MatrahDvz: 0,
+            BA: BA || 'A'
+          }
+        ]
+      }
+    };
+
+    this.log('Dekont kalemi ekleniyor', 'info', kalemData);
+
+    return await this.callErpApi('/api/Dekont/Kalem', 'POST', {
+      KayitTipi: '1',
+      body: kalemData
+    });
+  }
+
+  private async updateDekont(args: any) {
+    const { 
+      DekontID, 
+      Tarih, 
+      BelgeNo, 
+      Vade, 
+      SirketID, 
+      SubeID, 
+      RefDepoID, 
+      CariID, 
+      DovizID, 
+      Aciklama 
+    } = args;
+    
+    if (!DekontID) {
+      throw new Error('DekontID gerekli');
+    }
+
+    // Sadece verilen parametreleri güncelle
+    const updateData: any = {
+      DekontID: parseInt(DekontID)
+    };
+
+    if (Tarih) updateData.Tarih = Tarih;
+    if (BelgeNo) updateData.BelgeNo = BelgeNo;
+    if (Vade) updateData.Vade = Vade;
+    if (SirketID) updateData.SirketID = parseInt(SirketID);
+    if (SubeID) updateData.SubeID = parseInt(SubeID);
+    if (RefDepoID) updateData.RefDepoID = parseInt(RefDepoID);
+    if (CariID) updateData.CariID = parseInt(CariID);
+    if (DovizID) updateData.DovizID = parseInt(DovizID);
+    if (Aciklama) updateData.Aciklama = Aciklama;
+
+    this.log('Dekont güncelleniyor', 'info', updateData);
+
+    const dekontUpdateData = {
+      Baslik: updateData
+    };
+
+    return await this.callErpApi('/api/Dekont/Baslik', 'POST', {
+      KayitTipi: '2', // Güncelleme için 2
+      body: dekontUpdateData
+    });
+  }
+
+  private async testWebhook(args: any) {
+    const { endpoint, method, body, params } = args;
+    
+    if (!endpoint || !method) {
+      throw new Error('endpoint ve method gerekli');
+    }
+
     try {
+      // Token'ı otomatik olarak al (cache'den veya yeni)
+      let token = this.getCachedToken();
+      if (!token) {
+        this.log('Token bulunamadı, yeni token alınıyor...');
+        token = await this.getErpToken();
+      }
+
+      // Test webhook URL'si
+      const webhookUrl = 'https://webhook-test.com/98d5387842dbdb11a49158e688a67d65';
+      
       const config: any = {
         method,
-        url: `${this.settings.erp.baseUrl}${endpoint}`,
+        url: webhookUrl,
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': encodeURIComponent(token),
+          'X-Original-URL': `${this.settings.erp.baseUrl}${endpoint}`,
+          'X-Original-Method': method,
           ...this.settings.api.defaultHeaders,
         },
         timeout: this.settings.api.timeout,
       };
 
       if (method === 'GET') {
-        // Token hariç tüm parametreleri query string olarak ekle
-        const queryParams = { ...params };
-        delete queryParams.token;
+        // Query parametrelerini ekle
+        if (params && Object.keys(params).length > 0) {
+          config.params = params;
+        }
+      } else if (method === 'POST') {
+        if (body) {
+          config.data = body;
+        }
+        
+        // POST için query parametreleri de ekle
+        if (params && Object.keys(params).length > 0) {
+          config.params = params;
+        }
+      }
+
+      this.log(`Test webhook çağrısı: ${method} ${endpoint}`, 'info', {
+        webhookUrl,
+        originalEndpoint: endpoint,
+        method: config.method,
+        params: config.params,
+        headers: config.headers
+      });
+      
+      const response = await axios(config);
+      
+      this.log(`Test webhook başarılı: ${method} ${endpoint}`, 'info', {
+        status: response.status,
+        dataLength: JSON.stringify(response.data).length
+      });
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Test webhook başarılı!\n\nOriginal Endpoint: ${endpoint}\nMethod: ${method}\nWebhook URL: ${webhookUrl}\n\nResponse:\n${JSON.stringify(response.data, null, 2)}`,
+          },
+        ],
+      };
+    } catch (error) {
+      let errorMessage = 'Bilinmeyen hata';
+      
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          errorMessage = `HTTP ${error.response.status}: ${error.response.statusText}`;
+          if (error.response.data) {
+            errorMessage += `\n${JSON.stringify(error.response.data, null, 2)}`;
+          }
+        } else if (error.request) {
+          errorMessage = 'İstek gönderildi ancak yanıt alınamadı';
+        } else {
+          errorMessage = error.message;
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
+      this.log(`Test webhook hatası: ${method} ${endpoint}`, 'error', { error: errorMessage });
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Test Webhook Hatası: ${errorMessage}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+
+  private async callErpApi(endpoint: string, method: 'GET' | 'POST', args: any) {
+    try {
+      // Token'ı otomatik olarak al (cache'den veya yeni)
+      let token = this.getCachedToken();
+      if (!token) {
+        this.log('Token bulunamadı, yeni token alınıyor...');
+        token = await this.getErpToken();
+      }
+      
+      // URL'nin harici olup olmadığını kontrol et
+      const isExternalUrl = endpoint.startsWith('http://') || endpoint.startsWith('https://');
+      const finalUrl = isExternalUrl ? endpoint : `${this.settings.erp.baseUrl}${endpoint}`;
+      
+      const config: any = {
+        method,
+        url: finalUrl,
+        headers: {
+          'Authorization': `Bearer ${encodeURIComponent(token)}`,
+          ...this.settings.api.defaultHeaders,
+        },
+        timeout: this.settings.api.timeout,
+      };
+
+      // Harici URL için ek header'lar ekle
+      if (isExternalUrl) {
+        config.headers['X-Original-ERP-URL'] = `${this.settings.erp.baseUrl}${endpoint.replace(/^https?:\/\/[^\/]+/, '')}`;
+        config.headers['X-ERP-Token'] = encodeURIComponent(token);
+      }
+
+      if (method === 'GET') {
+        // Tüm parametreleri query string olarak ekle
+        const queryParams = { ...args };
         delete queryParams.endpoint;
         delete queryParams.method;
         delete queryParams.body;
@@ -410,8 +734,7 @@ class ErpTokenServer {
         }
         
         // POST için query parametreleri de ekle
-        const queryParams = { ...params };
-        delete queryParams.token;
+        const queryParams = { ...args };
         delete queryParams.endpoint;
         delete queryParams.method;
         delete queryParams.body;
@@ -421,17 +744,19 @@ class ErpTokenServer {
         }
       }
 
-      this.log(`ERP API çağrısı: ${method} ${endpoint}`, 'info', {
+      this.log(`API çağrısı: ${method} ${endpoint}`, 'info', {
         url: config.url,
         method: config.method,
-        params: config.params
+        params: config.params,
+        isExternal: isExternalUrl
       });
       
       const response = await axios(config);
       
-      this.log(`ERP API başarılı: ${method} ${endpoint}`, 'info', {
+      this.log(`API başarılı: ${method} ${endpoint}`, 'info', {
         status: response.status,
-        dataLength: JSON.stringify(response.data).length
+        dataLength: JSON.stringify(response.data).length,
+        isExternal: isExternalUrl
       });
       
       return {
@@ -460,13 +785,13 @@ class ErpTokenServer {
         errorMessage = error.message;
       }
 
-      this.log(`ERP API hatası: ${method} ${endpoint}`, 'error', { error: errorMessage });
+      this.log(`API hatası: ${method} ${endpoint}`, 'error', { error: errorMessage });
 
       return {
         content: [
           {
             type: 'text',
-            text: `ERP API Hatası: ${errorMessage}`,
+            text: `API Hatası: ${errorMessage}`,
           },
         ],
         isError: true,
@@ -484,12 +809,113 @@ class ErpTokenServer {
     this.log('Cache\'de geçerli token bulunamadı, yeni token alınıyor...');
 
     try {
-      // Tarayıcıyı başlat
-      this.browser = await puppeteer.launch({
+      // Sistemdeki Chrome'u bul
+      const possibleChromePaths = [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        path.join(os.homedir(), 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe')
+      ];
+      
+      let chromePath: string | undefined;
+      for (const possiblePath of possibleChromePaths) {
+        if (fs.existsSync(possiblePath)) {
+          chromePath = possiblePath;
+          break;
+        }
+      }
+      
+      // Tarayıcı başlatma seçenekleri
+      let launchOptions: any = {
         headless: this.settings.browser.headless,
         defaultViewport: this.settings.browser.defaultViewport,
-        args: this.settings.browser.args
-      });
+        args: [...this.settings.browser.args],
+        executablePath: chromePath
+      };
+      
+      if (chromePath) {
+        this.log('Sistemdeki Chrome kullanılıyor: ' + chromePath);
+      } else {
+        this.log('Sistemdeki Chrome bulunamadı, Puppeteer Chromium kullanılıyor');
+      }
+
+      // Önce mevcut Chrome'a bağlanmaya çalış
+      try {
+        this.log('Mevcut Chrome instance\'ına bağlanmaya çalışılıyor...');
+        
+        // Chrome'un remote debugging portunu kontrol et
+        const debuggingPorts = [9222, 9223, 9224, 9225];
+        let connectedBrowser = null;
+        
+        for (const port of debuggingPorts) {
+          try {
+            const browserWSEndpoint = `ws://127.0.0.1:${port}`;
+            this.log(`Port ${port} kontrol ediliyor...`);
+            
+            // Mevcut Chrome'a bağlanmaya çalış
+            connectedBrowser = await puppeteer.connect({
+              browserWSEndpoint,
+              defaultViewport: this.settings.browser.defaultViewport
+            });
+            
+            this.log(`Mevcut Chrome'a başarıyla bağlanıldı (port: ${port})`);
+            this.browser = connectedBrowser;
+            break;
+            
+          } catch (connectError) {
+            // Bu port çalışmıyor, diğerini dene
+            continue;
+          }
+        }
+        
+        // Eğer mevcut Chrome'a bağlanamazsak, yeni instance başlat
+        if (!connectedBrowser) {
+          this.log('Mevcut Chrome\'a bağlanılamadı, yeni instance başlatılıyor...');
+          
+          // Geçici profil dizini oluştur
+          this.tempUserDataDir = path.join(os.tmpdir(), 'puppeteer-chrome-profile-' + Date.now());
+          const originalUserDataDir = path.join(os.homedir(), 'AppData', 'Local', 'Google', 'Chrome', 'User Data');
+          
+          if (fs.existsSync(originalUserDataDir)) {
+            this.log('Geçici profil dizini oluşturuluyor...');
+            
+            if (!fs.existsSync(this.tempUserDataDir)) {
+              fs.mkdirSync(this.tempUserDataDir, { recursive: true });
+            }
+            
+            const defaultProfileDir = path.join(originalUserDataDir, 'Default');
+            const tempDefaultDir = path.join(this.tempUserDataDir, 'Default');
+            
+            if (fs.existsSync(defaultProfileDir) && !fs.existsSync(tempDefaultDir)) {
+              fs.mkdirSync(tempDefaultDir, { recursive: true });
+              
+              const prefsFile = path.join(defaultProfileDir, 'Preferences');
+              const tempPrefsFile = path.join(tempDefaultDir, 'Preferences');
+              
+              if (fs.existsSync(prefsFile)) {
+                fs.copyFileSync(prefsFile, tempPrefsFile);
+                this.log('Profil tercihleri kopyalandı');
+              }
+            }
+            
+            launchOptions.args.push(`--user-data-dir=${this.tempUserDataDir}`);
+            launchOptions.args.push('--profile-directory=Default');
+          }
+          
+          // Remote debugging portunu ekle
+          launchOptions.args.push('--remote-debugging-port=9222');
+          
+          this.browser = await puppeteer.launch(launchOptions);
+          this.log('Yeni Chrome instance başlatıldı');
+        }
+        
+      } catch (error) {
+        this.log('Chrome bağlantısı başarısız, fallback modda başlatılıyor...', 'warn');
+        this.browser = await puppeteer.launch(launchOptions);
+      }
+
+      if (!this.browser) {
+        throw new Error('Tarayıcı başlatılamadı');
+      }
 
       const page = await this.browser.newPage();
       
@@ -539,25 +965,39 @@ class ErpTokenServer {
       this.log('Token elementi bulundu, token alınıyor...');
 
       // Token'i al
-      const token = await page.$eval(this.settings.erp.tokenSelector, (element) => {
+      const tokenText = await page.$eval(this.settings.erp.tokenSelector, (element) => {
         return element.textContent || element.getAttribute('value') || '';
       });
 
-      if (!token || token.trim() === '') {
+      if (!tokenText || tokenText.trim() === '') {
         throw new Error('Token elementinde token bulunamadı');
       }
 
-      const cleanToken = token.trim();
-      this.log(`Token başarıyla alındı: ${cleanToken}`);
+      const cleanTokenText = tokenText.trim();
+      this.log(`Token metni alındı, parse ediliyor...`);
 
-      // Token'i cache'e kaydet
-      this.saveTokenCache(cleanToken, this.settings.erp.tokenCacheMinutes);
+      // Token bilgilerini parse et
+      const tokenInfo = this.parseTokenInfo(cleanTokenText);
+      
+      if (!tokenInfo.token) {
+        throw new Error('Token parse edilemedi');
+      }
+
+      this.log(`Token başarıyla parse edildi`, 'info', {
+        user: tokenInfo.user,
+        validFrom: tokenInfo.validFrom,
+        validTo: tokenInfo.validTo,
+        group: tokenInfo.group
+      });
+
+      // Token'i cache'e kaydet (parse edilen bilgilerle)
+      this.saveTokenCacheWithInfo(tokenInfo);
 
       // Tarayıcıyı kapat
       await this.browser.close();
       this.browser = null;
 
-      return cleanToken;
+      return tokenInfo.token;
 
     } catch (error) {
       // Hata durumunda tarayıcıyı kapat
@@ -567,6 +1007,147 @@ class ErpTokenServer {
       }
       
       throw new Error(`ERP token alma işlemi başarısız: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}`);
+    }
+  }
+
+  private parseTokenInfo(tokenText: string): TokenCache {
+    try {
+      this.log('Token parse işlemi başlıyor', 'info', { tokenTextLength: tokenText.length });
+      
+      // HTML tag'lerini temizle ve <br> tag'lerini \n ile değiştir
+      let cleanText = tokenText
+        .replace(/<br\s*\/?>/gi, '\n')  // <br> tag'lerini \n ile değiştir
+        .replace(/<[^>]*>/g, '')        // Diğer HTML tag'lerini kaldır
+        .replace(/&nbsp;/g, ' ')        // &nbsp; karakterlerini boşluk ile değiştir
+        .trim();
+      
+      this.log('HTML temizlendi', 'info', { cleanTextLength: cleanText.length, cleanText: cleanText.substring(0, 200) + '...' });
+      
+      // Regex ile direkt parse et (satır bazlı değil, tüm metin üzerinde)
+      let user = '';
+      let token = '';
+      let validFrom = '';
+      let validTo = '';
+      let group = '';
+      
+      // Kullanıcı bilgisini bul
+      const userMatch = cleanText.match(/Kullanıcı\s*:\s*([^\s]+@[^\s]+)/);
+      if (userMatch) {
+        user = userMatch[1];
+        this.log('Kullanıcı bulundu', 'info', { user });
+      }
+      
+      // Token'ı bul - "Geçici Erişim Anahtarı : " dan sonra boşluk öncesine kadar
+      const tokenMatch = cleanText.match(/Geçici Erişim Anahtarı\s*:\s*([A-Za-z0-9_\-]+)/);
+      if (tokenMatch) {
+        token = tokenMatch[1];
+        this.log('Token bulundu', 'info', { tokenLength: token.length, tokenPreview: token.substring(0, 20) + '...' });
+      }
+      
+      // Geçerlilik başlangıç tarihini bul
+      const validFromMatch = cleanText.match(/Geçerlilik Başlangıç\s*:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})/);
+      if (validFromMatch) {
+        validFrom = validFromMatch[1];
+        this.log('Başlangıç tarihi bulundu', 'info', { validFrom });
+      }
+      
+      // Geçerlilik bitiş tarihini bul
+      const validToMatch = cleanText.match(/Geçerlilik Bitiş\s*:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})/);
+      if (validToMatch) {
+        validTo = validToMatch[1];
+        this.log('Bitiş tarihi bulundu', 'info', { validTo });
+      }
+      
+      // Grup bilgisini bul
+      const groupMatch = cleanText.match(/Grup\s*:\s*(\d+)/);
+      if (groupMatch) {
+        group = groupMatch[1];
+        this.log('Grup bulundu', 'info', { group });
+      }
+      
+      // Token bulunamadıysa fallback
+      if (!token || token.length < 10) {
+        this.log('Token regex ile bulunamadı, fallback deneniyor...', 'warn');
+        
+        // Fallback: En uzun alfanumerik+özel karakter dizisini bul
+        const tokenFallbackMatch = cleanText.match(/([A-Za-z0-9_\-]{100,})/);
+        if (tokenFallbackMatch) {
+          token = tokenFallbackMatch[1];
+          this.log('Fallback token bulundu', 'info', { 
+            tokenLength: token.length,
+            tokenPreview: token.substring(0, 20) + '...'
+          });
+        } else {
+          throw new Error(`Token bulunamadı. Metin: ${cleanText.substring(0, 200)}...`);
+        }
+      }
+      
+      // Geçerlilik bitiş tarihini parse et ve expiresAt hesapla
+      let expiresAt = Date.now() + (this.settings.erp.tokenCacheMinutes * 60 * 1000); // Varsayılan
+      
+      if (validTo) {
+        try {
+          // "2025-07-25 22:43" formatını parse et
+          const [datePart, timePart] = validTo.split(' ');
+          const [year, month, day] = datePart.split('-').map(Number);
+          const [hour, minute] = timePart.split(':').map(Number);
+          
+          const expireDate = new Date(year, month - 1, day, hour, minute);
+          expiresAt = expireDate.getTime();
+          
+          this.log(`Token geçerlilik bitiş tarihi parse edildi: ${expireDate.toISOString()}`);
+        } catch (parseError) {
+          this.log('Token geçerlilik tarihi parse edilemedi, varsayılan süre kullanılıyor', 'warn', parseError);
+        }
+      }
+      
+      const result = {
+        token,
+        expiresAt,
+        createdAt: Date.now(),
+        user,
+        validFrom,
+        validTo,
+        group,
+        rawText: tokenText
+      };
+      
+      this.log('Token parse işlemi tamamlandı', 'info', {
+        hasToken: !!result.token,
+        tokenLength: result.token.length,
+        hasUser: !!result.user,
+        hasValidTo: !!result.validTo,
+        user: result.user,
+        validFrom: result.validFrom,
+        validTo: result.validTo,
+        group: result.group
+      });
+      
+      return result;
+      
+    } catch (error) {
+      this.log('Token parse hatası', 'error', { 
+        error: error instanceof Error ? error.message : 'Bilinmeyen hata',
+        tokenText: tokenText.substring(0, 200) + '...'
+      });
+      throw new Error(`Token bilgileri parse edilemedi: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}`);
+    }
+  }
+
+  private saveTokenCacheWithInfo(tokenInfo: TokenCache): void {
+    try {
+      fs.writeFileSync(this.tokenCacheFile, JSON.stringify(tokenInfo, null, 2));
+      
+      const remainingMinutes = Math.floor((tokenInfo.expiresAt - Date.now()) / (60 * 1000));
+      this.log(`Token cache'e kaydedildi`, 'info', {
+        user: tokenInfo.user,
+        validFrom: tokenInfo.validFrom,
+        validTo: tokenInfo.validTo,
+        group: tokenInfo.group,
+        remainingMinutes
+      });
+    } catch (error) {
+      this.log('Token cache kaydetme hatası', 'error', error);
     }
   }
 
