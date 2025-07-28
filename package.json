@@ -1,21 +1,45 @@
 {
-  "name": "erp-token-server",
-  "version": "1.0.0",
-  "description": "AARO ERP MCP Server",
+  "name": "aaro-erp-mcp-server",
+  "version": "1.0.5",
+  "description": "AARO ERP MCP Server for Claude Desktop",
   "main": "build/index.js",
   "type": "module",
   "scripts": {
     "build": "tsc",
     "start": "node build/index.js",
+    "prepublishOnly": "npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "bin": {
+    "aaro-erp-mcp-server": "./build/index.js"
+  },
+  "files": [
+    "build/",
+    "config/",
+    "README.md",
+    "package.json"
+  ],
   "keywords": [
     "mcp",
     "erp",
-    "token"
+    "aaro",
+    "claude",
+    "desktop",
+    "server"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Aaro Yazılım <info@aaro.com.tr>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aaroyazilim/aaro-erp-mcp-server.git"
+  },
+  "homepage": "https://github.com/aaroyazilim/aaro-erp-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/aaroyazilim/aaro-erp-mcp-server/issues"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.16.0",
     "axios": "^1.10.0",
