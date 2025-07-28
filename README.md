@@ -87,34 +87,6 @@ Konfigürasyon değişikliklerinin etkili olması için Claude Desktop'ı kapat�
 Artık Claude Desktop'ta AARO ERP araçlarını kullanabilirsiniz. İlk kullanımda paket otomatik olarak NPM'den indirilecektir.
  
 
-## 🔍 Filtreleme Özellikleri
-
-Tüm listeleme araçları gelişmiş filtreleme destekler:
-
-### Filtreleme Örnekleri:
-- **StokID="100,101,102"** (çoklu seçim)
-- **TipID="!105001"** (hariç tutma)
-- **TarihBas="2024-01-01"** (tarih aralığı)
-- **Sayfa=2, SayfaSatirSayisi=50** (sayfalama)
-- **EsnekAramaKisiti="arama_terimi"** (genel arama)
-
-## 📊 Tip ID'leri
-
-### Stok Tipleri
-- **105001** - Fiziksel Stok
-- **105002** - Gelir-Gider
-- **105003** - Demirbaş
-
-### Cari Tipleri
-- **2001** - Standart Cari
-
-### Hareket Tipleri
-- **10005** - Satış Faturası
-- **10006** - Alış Faturası
-- **10009** - Satış İrsaliyesi
-- **10013** - Alınan Sipariş
-- **10019** - Depolar Arası Transfer
-
 ## 🔐 Güvenlik
 
 - Bearer token authentication
@@ -129,11 +101,6 @@ Tüm listeleme araçları gelişmiş filtreleme destekler:
 - **Axios** ile HTTP istekleri
 - **MCP SDK** ile Claude Desktop entegrasyonu
 - **Modüler yapı** ile kolay genişletme
-
-## 📝 API Endpoint'leri
-
-- **Base URL**: `https://erp.aaro.com.tr/api`
-- **Token URL**: `https://erp.aaro.com.tr/Account/GeciciErisimAnahtari`
 
 ## 🐛 Hata Ayıklama
 
@@ -230,19 +197,6 @@ npx clear-npx-cache aaro-erp-mcp-server
 - ✅ Kapsamlı hata yönetimi
 - ✅ TypeScript desteği
 
-## 📄 Lisans
-
-Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICENSE) dosyasına bakın.
-
-## 🙏 Teşekkürler
-
-- [AARO ERP](https://aaro.com.tr) - API dokümantasyonu ve destek için
-- [Model Context Protocol](https://modelcontextprotocol.io/) - MCP framework için
-- [Claude Desktop](https://claude.ai/desktop) - Entegrasyon platformu için
-
 ## 📞 Destek ve İletişim
-
-- 🐛 **Bug Report**: [GitHub Issues](https://github.com/AaroYazilim/aaro-erp-mcp-server/issues)
-- 💡 **Feature Request**: [GitHub Discussions](https://github.com/AaroYazilim/aaro-erp-mcp-server/discussions)
 - 📧 **Email**: info@aaro.com.tr
 
