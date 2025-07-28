@@ -6,6 +6,9 @@
 
 AARO ERP sistemi için Claude Desktop entegrasyonu sağlayan MCP (Model Context Protocol) server'ı. Bu server, AARO ERP API'sine erişim, token yönetimi ve tüm temel ERP işlemlerini Claude Desktop üzerinden gerçekleştirmenizi sağlar.
 
+<a href="https://glama.ai/mcp/servers/@AaroYazilim/aaro-erp-mcp-server">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@AaroYazilim/aaro-erp-mcp-server/badge" alt="AARO ERP Server MCP server" />
+</a>
 
 ## 📋 Mevcut Araçlar Listesi
 
@@ -245,4 +248,3 @@ Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için [LICENSE](LICE
 - 🐛 **Bug Report**: [GitHub Issues](https://github.com/AaroYazilim/aaro-erp-mcp-server/issues)
 - 💡 **Feature Request**: [GitHub Discussions](https://github.com/AaroYazilim/aaro-erp-mcp-server/discussions)
 - 📧 **Email**: info@aaro.com.tr
-
